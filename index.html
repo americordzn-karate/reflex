@@ -76,17 +76,27 @@
             overflow: hidden;
         }
 
-        /* El blanco o makiwara a golpear */
+        /* Estilo base del objetivo en pantalla */
         #target {
             width: 70px;
             height: 70px;
-            background: radial-gradient(circle, #f00 30%, #fff 31%, #fff 60%, #000 61%);
             border-radius: 50%;
             position: absolute;
             display: none;
             box-shadow: 0 4px 10px rgba(0,0,0,0.6);
             transform: translate(-50%, -50%);
             transition: transform 0.1s ease;
+        }
+
+        /* Clase dinámica para el blanco BUENO (Foco de Karate) */
+        .target-good {
+            background: radial-gradient(circle, #f00 30%, #fff 31%, #fff 60%, #000 61%);
+        }
+
+        /* Clase dinámica para el blanco MALO / TRAMPA (Shuriken/Escudo prohibido) */
+        .target-bad {
+            background: radial-gradient(circle, #000 20%, #ffcc00 21%, #111 45%, #ffcc00 46%, #000 70%);
+            border: 3px dashed #ff0000;
         }
 
         #target:active {
@@ -134,12 +144,13 @@
 
         .feedback-popup {
             position: absolute;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: bold;
             text-transform: uppercase;
             pointer-events: none;
             animation: floatUp 0.6s ease-out forwards;
             z-index: 5;
+            text-shadow: 2px 2px #000;
         }
 
         @keyframes floatUp {
@@ -181,13 +192,16 @@
             <div id="target"></div>
             
             <div id="start-screen" class="overlay active">
-                <h2 style="margin-bottom: 15px;">¿Listo para el Combate?</h2>
-                <p style="margin-bottom: 20px; font-size: 14px; color: #ccc;">Golpea el foco rojo tan rápido como aparezca. ¡Tienes 10 intentos!</p>
+                <h2 style="margin-bottom: 11px; color: #ffcc00;">¿Listo, Karateca?</h2>
+                <p style="margin-bottom: 10px; font-size: 14px; color: #fff; padding: 0 10px;">
+                    🟢 Golpea rápido el <b>Foco Rojo</b>.<br>
+                    ❌ ¡<b>NO GOLPEES</b> el blanco amarillo con negro o perderás!
+                </p>
                 <button class="btn" onclick="startGame()">¡Hajime! (Iniciar)</button>
             </div>
 
             <div id="report-screen" class="overlay">
-                <h2 style="color: #ffcc00; margin-bottom: 5px;">¡Fin del Entrenamiento!</h2>
+                <h2 id="report-title" style="color: #ffcc00; margin-bottom: 5px;">¡Fin del Entrenamiento!</h2>
                 <p id="final-score" style="font-size: 18px; font-weight: bold; margin-bottom: 10px;"></p>
                 
                 <div style="max-height: 110px; overflow-y: auto; width: 100%;">
@@ -195,7 +209,7 @@
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Tiempo</th>
+                                <th>Tiempo / Estado</th>
                                 <th>Puntos</th>
                             </tr>
                         </thead>
@@ -207,7 +221,7 @@
             </div>
         </div>
         
-        <p style="font-size: 12px; color: #666;">Diseñado para pantallas táctiles y PC</p>
+        <p style="font-size: 12px; color: #666;">Control de distracción activo • Senshi-Kan</p>
     </div>
 
     <script>
@@ -218,8 +232,11 @@
         const totalAttempts = 10;
         let targetSpawnTime = 0;
         let targetTimeout;
+        let badTargetLifespanTimeout; // Controla los 2 segundos de desaparición automática del malo
         let gameActive = false;
         let attemptsData = [];
+        let currentTargetType = "good"; // Puede ser "good" o "bad"
+        let gameOverByTrap = false;
 
         // Referencias del DOM
         const target = document.getElementById('target');
@@ -230,9 +247,10 @@
         const reportScreen = document.getElementById('report-screen');
         const resultsBody = document.getElementById('results-body');
         const finalScoreText = document.getElementById('final-score');
+        const reportTitle = document.getElementById('report-title');
         const welcomeUserText = document.getElementById('welcome-user');
 
-        // Capturar datos del alumno desde la URL (Ecosistema Senshi-Kan)
+        // Capturar datos del alumno desde la URL
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
             if (params.has('nombre')) {
@@ -246,10 +264,13 @@
             score = 0;
             currentAttempt = 0;
             attemptsData = [];
+            gameOverByTrap = false;
             scoreDisplay.innerText = score;
             attemptDisplay.innerText = currentAttempt;
             startScreen.classList.remove('active');
             reportScreen.classList.remove('active');
+            reportTitle.innerText = "¡Fin del Entrenamiento!";
+            reportTitle.style.color = "#ffcc00";
             gameActive = true;
             nextAttempt();
         }
@@ -258,7 +279,9 @@
             if (!gameActive) return;
 
             target.style.display = 'none';
+            clearTimeout(badTargetLifespanTimeout);
 
+            // Si ya completó los 10 intentos permitidos con éxito, termina el juego de forma normal
             if (currentAttempt >= totalAttempts) {
                 endGame();
                 return;
@@ -267,7 +290,7 @@
             currentAttempt++;
             attemptDisplay.innerText = currentAttempt;
 
-            // Tiempo de espera aleatorio entre 1.5 y 3.5 segundos antes de que aparezca el objetivo
+            // Tiempo de espera aleatorio entre 1.5 y 3.5 segundos
             const randomDelay = Math.random() * 2000 + 1500;
             targetTimeout = setTimeout(spawnTarget, randomDelay);
         }
@@ -275,11 +298,21 @@
         function spawnTarget() {
             if (!gameActive) return;
 
-            // Dimensiones del área para evitar que el objetivo se salga de los bordes
+            // Decidir de forma aleatoria el tipo de objetivo (70% Bueno, 30% Objeto Trampa)
+            currentTargetType = Math.random() < 0.3 ? "bad" : "good";
+
+            // Limpiar clases previas y asignar la nueva estética correspondiente
+            target.className = "";
+            if (currentTargetType === "good") {
+                target.classList.add('target-good');
+            } else {
+                target.classList.add('target-bad');
+            }
+
+            // Dimensiones del área para evitar desbordes
             const areaWidth = targetArea.clientWidth;
             const areaHeight = targetArea.clientHeight;
 
-            // Posición aleatoria considerando el tamaño del objetivo (70px)
             const padding = 40;
             const randomX = Math.random() * (areaWidth - padding * 2) + padding;
             const randomY = Math.random() * (areaHeight - padding * 2) + padding;
@@ -288,25 +321,54 @@
             target.style.top = `${randomY}px`;
             target.style.display = 'block';
 
-            // Guardar el tiempo exacto en que apareció en milisegundos
             targetSpawnTime = performance.now();
+
+            // Si el objeto es MALO, programar su desaparición automática tras exactamente 2 segundos (2000ms)
+            if (currentTargetType === "bad") {
+                badTargetLifespanTimeout = setTimeout(function() {
+                    if (gameActive && target.style.display === 'block') {
+                        target.style.display = 'none';
+                        // Registrar en la tabla que se evitó con éxito la trampa
+                        attemptsData.push({
+                            attempt: currentAttempt,
+                            time: "Evitado 🛡️",
+                            points: 0
+                        });
+                        showFeedbackPopup("¡BIEN EVITADO!", "#3182ce");
+                        nextAttempt(); // Continúa el juego de forma fluida
+                    }
+                }, 2000);
+            }
         }
 
-        // Evento al golpear (hacer clic o tocar) el objetivo
+        // Evento al golpear (hacer clic o tocar) el objetivo activo
         target.addEventListener('pointerdown', function(e) {
-            e.stopPropagation(); // Evita falsos clics en el área de fondo
+            e.stopPropagation();
             
             if (target.style.display === 'none' || !gameActive) return;
 
-            const hitTime = performance.now();
-            const reactionTime = (hitTime - targetSpawnTime) / 1000; // Convertir a segundos
-            
+            clearTimeout(badTargetLifespanTimeout);
             target.style.display = 'none';
-            evaluateHit(reactionTime);
-            nextAttempt();
+
+            if (currentTargetType === "bad") {
+                // ¡TOCÓ UN OBJETO TRAMPA! Se acaba el juego de inmediato
+                gameOverByTrap = true;
+                attemptsData.push({
+                    attempt: currentAttempt,
+                    time: "¡TRAMPA TOCADA! 💥",
+                    points: 0
+                });
+                showFeedbackPopup("¡TRAMPA! KO", "#e53e3e");
+                endGame();
+            } else {
+                // Golpeó un objeto bueno: evaluar desempeño normal por tiempo de reacción
+                const hitTime = performance.now();
+                const reactionTime = (hitTime - targetSpawnTime) / 1000;
+                evaluateHit(reactionTime);
+                nextAttempt();
+            }
         });
 
-        // Evaluar la velocidad del impacto de acuerdo al tabulador establecido
         function evaluateHit(time) {
             let points = 0;
             let text = "MUY LENTO";
@@ -326,21 +388,19 @@
                 color = varStyle('--slow');
             } else {
                 points = 0;
-                text = "¡FUERA DE TIEMPO!";
+                text = "FUERA DE TIEMPO";
                 color = "#555";
             }
 
             score += points;
             scoreDisplay.innerText = score;
 
-            // Guardar datos del intento para el reporte final
             attemptsData.push({
                 attempt: currentAttempt,
                 time: time.toFixed(3) + "s",
                 points: points
             });
 
-            // Mostrar el aviso flotante visual
             showFeedbackPopup(text, color);
         }
 
@@ -359,9 +419,16 @@
         function endGame() {
             gameActive = false;
             clearTimeout(targetTimeout);
+            clearTimeout(badTargetLifespanTimeout);
             target.style.display = 'none';
 
-            // Renderizar la tabla de resultados
+            // Ajustar el título del reporte si perdió por caer en la trampa
+            if (gameOverByTrap) {
+                reportTitle.innerText = "¡Descalificado por Distracción!";
+                reportTitle.style.color = "#e53e3e";
+            }
+
+            // Renderizar la tabla de resultados acumulados
             resultsBody.innerHTML = "";
             attemptsData.forEach(data => {
                 const row = `<tr>
@@ -375,7 +442,7 @@
             finalScoreText.innerText = `Puntuación Total: ${score} Pts`;
             reportScreen.classList.add('active');
 
-            // Guardar automáticamente en el backend (Sheets / Sistema de gamificación)
+            // Guardado automático en el backend (Sheets)
             sendDataToBackend();
         }
 
@@ -383,7 +450,6 @@
         function sendDataToBackend() {
             console.log(`Enviando resultados de ${playerName}: ${score} puntos acumulados.`);
             
-            // Reemplaza esta URL con la dirección ejecutada de tu Google Apps Script (/exec)
             const webAppUrl = "https://script.google.com/macros/s/.../exec"; 
 
             const data = {
@@ -393,7 +459,6 @@
                 Fecha: new Date().toISOString()
             };
 
-            // Envío pasivo estilo no-cors utilizado en tus retos anteriores
             fetch(webAppUrl, {
                 method: "POST",
                 mode: "no-cors",
@@ -403,12 +468,10 @@
         }
 
         function returnToPortal() {
-            // Envía de regreso los parámetros y el nombre a la URL raíz del portal
             const portalUrl = "https://americordzn-karate.github.io/retos/";
             window.location.href = `${portalUrl}?nombre=${encodeURIComponent(playerName)}&score=${score}`;
         }
 
-        // Función auxiliar para obtener variables de CSS
         function varStyle(name) {
             return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
         }
