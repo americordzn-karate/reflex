@@ -250,14 +250,58 @@
         const reportTitle = document.getElementById('report-title');
         const welcomeUserText = document.getElementById('welcome-user');
 
-        // Capturar datos del alumno desde la URL
-        window.onload = function() {
+        // --- CONSTANTES DE INTEGRACIÓN ---
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwX5w8iiwkJVbGtpz-5f20U9jue2MC0vouE3blkHXo9CIMqg9bvCZrAYE8WKxH4gXGWzg/exec";
+        let nombreReto = "REFLEJOS"; // valor por defecto; se sobreescribe con el parámetro URL 'reto'
+
+        // Capturar datos del alumno desde la URL y verificar límite de intentos
+        window.onload = async function() {
             const params = new URLSearchParams(window.location.search);
             if (params.has('nombre')) {
                 playerName = params.get('nombre');
                 welcomeUserText.innerText = `Atleta: ${playerName}`;
             }
+            if (params.has('reto')) {
+                nombreReto = params.get('reto');
+            }
+            await verificarLimiteIntentos();
         };
+
+        // Consulta el backend para verificar si el alumno agotó sus intentos del día
+        async function verificarLimiteIntentos() {
+            const startBtn = document.querySelector('#start-screen .btn');
+            try {
+                const response = await fetch(WEB_APP_URL);
+                const data = await response.json();
+
+                // Obtener el límite diario desde Catalogo_Retos
+                const retoCatalogo = (data.retos || []).find(r =>
+                    r.nombre.trim().toUpperCase() === nombreReto.toUpperCase()
+                );
+                const limitePermitido = retoCatalogo ? parseInt(retoCatalogo.diario_permitido) : 999;
+
+                // Obtener intentos del alumno hoy para este reto
+                const hashKey = `${playerName}_${nombreReto}`;
+                const intentosHoy = (data.intentosHoy && data.intentosHoy[hashKey])
+                    ? parseInt(data.intentosHoy[hashKey])
+                    : 0;
+
+                console.log(`Intentos hoy: ${intentosHoy} / Límite: ${limitePermitido}`);
+
+                if (intentosHoy >= limitePermitido) {
+                    startBtn.disabled = true;
+                    startBtn.style.background = "#555";
+                    startBtn.style.color = "#999";
+                    startBtn.style.cursor = "not-allowed";
+                    startBtn.innerText = `Límite alcanzado (${intentosHoy}/${limitePermitido})`;
+                    document.querySelector('#start-screen p').innerHTML =
+                        `⛔ Has alcanzado el máximo de <b>${limitePermitido}</b> intento(s) permitido(s) por hoy.<br>Regresa mañana, Karateca.`;
+                }
+            } catch (err) {
+                console.log("No se pudo verificar el límite de intentos:", err);
+                // Si el backend falla, se permite jugar para no bloquear al alumno
+            }
+        }
 
         // --- LÓGICA DEL JUEGO ---
         function startGame() {
@@ -447,16 +491,14 @@
         // --- SISTEMA DE INTEGRACIÓN Y ENVÍO DE DATOS ---
         function sendDataToBackend() {
             console.log(`Guardando resultados de ${playerName}: ${score} pts.`);
-            const webAppUrl = "https://script.google.com/macros/s/.../exec"; 
 
             const data = {
-                Nombre_Alumno: playerName,
-                Nombre_Reto: "KARATE_REFLEX_CHALLENGE",
-                Puntuacion: score,
-                Fecha: new Date().toISOString()
+                nombre_alumno: playerName,
+                nombre_reto: nombreReto,
+                puntos: score
             };
 
-            fetch(webAppUrl, {
+            fetch(WEB_APP_URL, {
                 method: "POST",
                 mode: "no-cors",
                 headers: { "Content-Type": "application/json" },
