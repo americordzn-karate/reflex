@@ -197,7 +197,7 @@
                     🟢 Golpea rápido el <b>Foco Rojo</b>.<br>
                     ❌ ¡<b>NO GOLPEES</b> el blanco amarillo/negro u quedarás descalificado!
                 </p>
-                <button class="btn" onclick="startGame()">¡Hajime! (Iniciar)</button>
+                <button class="btn" id="start-btn" onclick="startGame()" disabled style="background:#555; color:#999; cursor:not-allowed;">Verificando...</button>
             </div>
 
             <div id="report-screen" class="overlay">
@@ -269,7 +269,7 @@
 
         // Consulta el backend para verificar si el alumno agotó sus intentos del día
         async function verificarLimiteIntentos() {
-            const startBtn = document.querySelector('#start-screen .btn');
+            const startBtn = document.getElementById('start-btn');
             try {
                 const response = await fetch(WEB_APP_URL);
                 const data = await response.json();
@@ -287,7 +287,12 @@
                     : 0;
 
                 console.log(`Intentos hoy: ${intentosHoy} / Límite: ${limitePermitido}`);
-
+// Habilitar el botón por defecto si la verificación fue exitosa
+startBtn.disabled = false;
+startBtn.style.background = "#ffcc00";
+startBtn.style.color = "#000";
+startBtn.style.cursor = "pointer";
+startBtn.innerText = "¡Hajime! (Iniciar)";
                 if (intentosHoy >= limitePermitido) {
                     startBtn.disabled = true;
                     startBtn.style.background = "#555";
