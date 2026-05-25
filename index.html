@@ -295,8 +295,8 @@
         function spawnTarget() {
             if (!gameActive) return;
 
-            // Decidir tipo de objeto: 30% Probabilidad de ser una trampa (Malo)
-            currentTargetType = Math.random() < 0.3 ? "bad" : "good";
+            // Decidir tipo de objeto: 40% Probabilidad de ser una trampa (Malo)
+            currentTargetType = Math.random() < 0.4 ? "bad" : "good";
 
             // Modificaciones de intento basadas estrictamente en la observación 1:
             if (currentTargetType === "good") {
@@ -371,15 +371,15 @@
             let color = varStyle('--slow');
 
             if (time < 0.750) {
-                points = 3;
+                points = 2;
                 text = "¡EXCELENTE! 🔥";
                 color = varStyle('--excellent');
             } else if (time >= 0.751 && time <= 0.990) {
-                points = 2;
+                points = 1;
                 text = "¡BIEN! 👍";
                 color = varStyle('--good');
             } else if (time > 0.990 && time <= 3.000) {
-                points = 1;
+                points = 0.5;
                 text = "LENTO 🥋";
                 color = varStyle('--slow');
             } else {
